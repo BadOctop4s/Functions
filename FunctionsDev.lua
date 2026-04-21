@@ -1405,39 +1405,71 @@ end
 ------------------------------------------------------------------------
 -- WEBHOOK
 ------------------------------------------------------------------------
-G.WebhookURL        = ""
-G.InvWebhookEnabled = false
-G.InvWebhookConn    = nil
-G.InvSnapshot       = {}
-G.SelectedIsland    = nil
+G.WebhookURL           = ""
+G.InvWebhookEnabled    = false
+G.InvWebhookConn       = nil
+G.InvSnapshot          = {}
+G.SelectedIsland       = nil
 
+-- usa request() que funciona em todos os executores (Synapse, KRNL, etc)
 local function httpPost(url, body)
-    local ok = false
-    if not ok then ok = pcall(function() request({ Url=url, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body }) end) end
-    if not ok then ok = pcall(function() http_request({ Url=url, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body }) end) end
-    if not ok then ok = pcall(function() syn.request({ Url=url, Method="POST", Headers={["Content-Type"]="application/json"}, Body=body }) end) end
-    if not ok then pcall(function() game:GetService("HttpService"):PostAsync(url, body, Enum.HttpContentType.ApplicationJson, false) end) end
+    if request then
+        request({
+            Url    = url,
+            Method = "POST",
+            Headers = { ["Content-Type"] = "application/json" },
+            Body   = body,
+        })
+    elseif http_request then
+        http_request({
+            Url    = url,
+            Method = "POST",
+            Headers = { ["Content-Type"] = "application/json" },
+            Body   = body,
+        })
+    elseif syn and syn.request then
+        syn.request({
+            Url    = url,
+            Method = "POST",
+            Headers = { ["Content-Type"] = "application/json" },
+            Body   = body,
+        })
+    else
+        -- fallback: usa HttpService (bloqueado na maioria dos executores fora de studio)
+        pcall(function()
+            game:GetService("HttpService"):PostAsync(url, body, Enum.HttpContentType.ApplicationJson, false)
+        end)
+    end
 end
 
 function G.sendWebhook(message)
     if not G.WebhookURL or G.WebhookURL == "" then
-        notify("WebHook", "Configure a URL primeiro!", 3, "x")
+        notify("WebHook", "Configure a URL do webhook primeiro!", 3, "x")
         return
     end
     local ok, err = pcall(function()
         local body = game:GetService("HttpService"):JSONEncode({ content = message })
         httpPost(G.WebhookURL, body)
     end)
-    if not ok then notify("WebHook", "Erro: " .. tostring(err), 4, "x")
-    else notify("WebHook", "Enviado!", 2, "solar:check-circle-bold") end
+    if not ok then
+        notify("WebHook", "Erro: " .. tostring(err), 4, "x")
+    else
+        notify("WebHook", "Mensagem enviada!", 2, "solar:check-circle-bold")
+    end
 end
 
 local function getInventorySnapshot()
     local snap = {}
     local bp = LP:FindFirstChildOfClass("Backpack")
-    if bp then for _, item in pairs(bp:GetChildren()) do snap[item.Name] = true end end
+    if bp then
+        for _, item in pairs(bp:GetChildren()) do snap[item.Name] = true end
+    end
     local char = LP.Character
-    if char then for _, item in pairs(char:GetChildren()) do if item:IsA("Tool") then snap[item.Name] = true end end end
+    if char then
+        for _, item in pairs(char:GetChildren()) do
+            if item:IsA("Tool") then snap[item.Name] = true end
+        end
+    end
     return snap
 end
 
@@ -1452,10 +1484,14 @@ function G.toggleInventoryWebhook(enabled)
             for name in pairs(current) do
                 if not G.InvSnapshot[name] then
                     G.InvSnapshot[name] = true
-                    local msg = "🎒 **Novo item!**\n👤 **" .. LP.Name .. "**\n📦 `" .. name .. "`"
+                    local msg = "🎒 **Novo item detectado!**\n"
+                        .. "👤 Jogador: **" .. LP.Name .. "**\n"
+                        .. "📦 Item: **" .. name .. "**\n"
+                        .. "🎮 Jogo: **" .. game.PlaceId .. "**"
                     task.spawn(function() G.sendWebhook(msg) end)
                 end
             end
+            -- limpa itens dropados
             for name in pairs(G.InvSnapshot) do
                 if not current[name] then G.InvSnapshot[name] = nil end
             end
