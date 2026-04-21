@@ -16,7 +16,9 @@ local HTTP = game:GetService("HttpService")
 local function getUI() return _G.RH_WindUI end
 local function notify(title, msg, dur, icon)
     pcall(function()
-        getUI():Notify({ Title = title, Content = msg, Duration = dur or 3, Icon = icon or "solar:bell-bold" })
+        local ui = getUI()
+        if not ui then return end
+        ui:Notify({ Title = title, Content = msg, Duration = dur or 3, Icon = icon or "solar:bell-bold" })
     end)
 end
 
